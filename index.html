@@ -4,73 +4,146 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Presensi Team OCC</title>
+
 <style>
-  body { font-family: sans-serif; text-align: center; padding: 20px; background-color: #f0f0f0; }
-  #reader { width: 100%; max-width: 600px; margin: auto; }
-  #status { margin-top: 20px; font-weight: bold; font-size: 18px; }
-  #rekap { margin-top: 20px; font-weight: bold; color: #333; font-size: 18px; text-align: left; white-space: pre-line; }
-  .success { color: green; }
-  .warning { color: orange; }
-  .error { color: red; }
+body{
+  font-family:sans-serif;
+  text-align:center;
+  padding:20px;
+  background:#f0f0f0;
+}
+
+#reader{
+  width:100%;
+  max-width:500px;
+  margin:auto;
+}
+
+#status{
+  margin-top:20px;
+  font-weight:bold;
+  font-size:18px;
+}
+
+#rekap{
+  margin-top:20px;
+  font-weight:bold;
+  font-size:18px;
+  white-space:pre-line;
+}
+
+.success{color:green;}
+.warning{color:orange;}
+.error{color:red;}
+
+#tanggal{
+  font-size:18px;
+  font-weight:bold;
+}
+
+#jam{
+  font-size:24px;
+  margin-bottom:15px;
+}
+
+h3{
+  margin-top:20px;
+}
 </style>
+
 </head>
 <body>
 
 <h1>Presensi Team OCC</h1>
+
+<div id="tanggal"></div>
+<div id="jam"></div>
+
+<h3>Kamera Scan</h3>
+
 <div id="reader"></div>
 <div id="status" class="success">Menunggu scan...</div>
 <div id="rekap"></div>
 
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
 <script>
 const statusEl = document.getElementById("status");
 const rekapEl = document.getElementById("rekap");
 
-// ✅ FORM BARU
-const FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSfhbHy8EX_RoYo3NGugSuKmEOb06prrdMvULrfpO1XEfGKD6w/formResponse";
+const FORM_URL =
+"https://docs.google.com/forms/d/e/1FAIpQLSfhbHy8EX_RoYo3NGugSuKmEOb06prrdMvULrfpO1XEfGKD6w/formResponse";
 
 let scannedToday = new Set();
+let scanner;
 let isSubmitting = false;
 
-function kirimForm(entryData) {
-  const formData = new FormData();
-  formData.append("entry.2129652086", entryData.id || "-");
-  formData.append("entry.1423031901", entryData.nama || "-");
-  formData.append("entry.476602258", entryData.jabatan || "-");
 
-  fetch(FORM_URL, { method: "POST", mode: "no-cors", body: formData })
-    .then(() => {
-      const now = new Date();
-      const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-      const tanggal = now.toLocaleDateString('id-ID', options);
-      const jam = now.toLocaleTimeString('id-ID');
+// ================= CLOCK =================
+function updateClock(){
 
-      statusEl.innerText = "Presensi Berhasil ✔";
-      statusEl.className = "success";
-      rekapEl.innerText = `
-Nama: ${entryData.nama}
-Jabatan: ${entryData.jabatan}
-Hari/Tanggal: ${tanggal}
-Jam: ${jam}
-      `;
+  const now = new Date();
 
-      setTimeout(() => {
-        statusEl.innerText = "Menunggu scan...";
-        statusEl.className = "success";
-      }, 3000);
+  const tanggal = now.toLocaleDateString("id-ID",{
+    weekday:"long",
+    day:"numeric",
+    month:"long",
+    year:"numeric"
+  });
 
-      isSubmitting = false;
-    })
-    .catch(err => {
-      console.error(err);
-      statusEl.innerText = "Gagal mengirim ❌";
-      statusEl.className = "error";
-      isSubmitting = false;
-    });
+  const jam = now.toLocaleTimeString("id-ID");
+
+  document.getElementById("tanggal").innerText = tanggal;
+  document.getElementById("jam").innerText = jam + " WIB";
 }
 
-function onScanSuccess(decodedText) {
-  if (isSubmitting) return;
+setInterval(updateClock,1000);
+updateClock();
+
+
+// ================= KIRIM FORM =================
+function kirimForm(entryData){
+
+  const formData = new FormData();
+
+  formData.append("entry.2129652086", entryData.id);
+  formData.append("entry.1423031901", entryData.nama);
+  formData.append("entry.476602258", entryData.jabatan);
+
+  fetch(FORM_URL,{
+    method:"POST",
+    mode:"no-cors",
+    body:formData
+  }).then(()=>{
+
+    const now = new Date();
+
+    statusEl.innerText = "Presensi Berhasil ✔";
+    statusEl.className = "success";
+
+    rekapEl.innerText =
+`Nama: ${entryData.nama}
+Jabatan: ${entryData.jabatan}
+Tanggal: ${now.toLocaleDateString("id-ID")}
+Jam: ${now.toLocaleTimeString("id-ID")}`;
+
+    // Pause scanner biar gak double scan
+    scanner.pause(true);
+
+    setTimeout(()=>{
+      statusEl.innerText = "Menunggu scan...";
+      scanner.resume();
+    },4000);
+
+    isSubmitting = false;
+  });
+}
+
+
+// ================= SCAN SUCCESS =================
+function onScanSuccess(decodedText){
+
+  if(isSubmitting) return;
   isSubmitting = true;
 
   const parts = decodedText.split("|");
@@ -83,31 +156,18 @@ function onScanSuccess(decodedText) {
   }
 
   const entryData = {
-    id: parts[0],
-    nama: parts[1],
-    jabatan: parts[2]
+    id:parts[0],
+    nama:parts[1],
+    jabatan:parts[2]
   };
 
   const todayKey =
-    entryData.id + "|" +
-    entryData.nama + "_" +
+    entryData.id +
     new Date().toLocaleDateString("id-ID");
 
-  if (scannedToday.has(todayKey)) {
-
-    const now = new Date();
-    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-
+  if(scannedToday.has(todayKey)){
     statusEl.innerText = "Sudah presensi hari ini ❌";
     statusEl.className = "warning";
-
-    rekapEl.innerText = `
-Nama: ${entryData.nama}
-Jabatan: ${entryData.jabatan}
-Hari/Tanggal: ${now.toLocaleDateString('id-ID', options)}
-Jam: ${now.toLocaleTimeString('id-ID')}
-    `;
-
     isSubmitting = false;
     return;
   }
@@ -116,27 +176,28 @@ Jam: ${now.toLocaleTimeString('id-ID')}
   kirimForm(entryData);
 }
 
-function onScanFailure(error) {}
 
-window.onload = function() {
-  Html5Qrcode.getCameras().then(cameras => {
-    if (cameras.length) {
+// ================= START CAMERA =================
+window.onload = function(){
 
-      const scanner = new Html5Qrcode("reader");
+  Html5Qrcode.getCameras().then(cameras=>{
 
-      scanner.start(
-        cameras[0].id,
-        { fps: 10, qrbox: 250 },
-        onScanSuccess,
-        onScanFailure
-      );
-
-    } else {
+    if(!cameras.length){
       statusEl.innerText = "Kamera tidak ditemukan ❌";
       statusEl.className = "error";
+      return;
     }
-  }).catch(err => {
-    statusEl.innerText = "Tidak bisa akses kamera ❌";
+
+    scanner = new Html5Qrcode("reader");
+
+    scanner.start(
+      cameras[0].id,
+      { fps:10, qrbox:250 },
+      onScanSuccess
+    );
+
+  }).catch(()=>{
+    statusEl.innerText = "Tidak bisa mengakses kamera ❌";
     statusEl.className = "error";
   });
 };
