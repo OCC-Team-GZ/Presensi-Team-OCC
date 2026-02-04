@@ -2,21 +2,145 @@
 <html lang="id">
 <head>
 <meta charset="UTF-8">
-<title>Presensi QR OCC</title>
-
-<link rel="stylesheet" href="style.css">
-<script src="https://unpkg.com/html5-qrcode"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Presensi Team OCC</title>
+<style>
+  body { font-family: sans-serif; text-align: center; padding: 20px; background-color: #f0f0f0; }
+  #reader { width: 100%; max-width: 600px; margin: auto; }
+  #status { margin-top: 20px; font-weight: bold; font-size: 18px; }
+  #rekap { margin-top: 20px; font-weight: bold; color: #333; font-size: 18px; text-align: left; white-space: pre-line; }
+  .success { color: green; }
+  .warning { color: orange; }
+  .error { color: red; }
+</style>
 </head>
-
 <body>
 
-<h2>Presensi Team OCC</h2>
-
+<h1>Presensi Team OCC</h1>
 <div id="reader"></div>
 <div id="status" class="success">Menunggu scan...</div>
 <div id="rekap"></div>
 
-<script src="script.js"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script>
+const statusEl = document.getElementById("status");
+const rekapEl = document.getElementById("rekap");
+
+// ✅ FORM BARU
+const FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSfhbHy8EX_RoYo3NGugSuKmEOb06prrdMvULrfpO1XEfGKD6w/formResponse";
+
+let scannedToday = new Set();
+let isSubmitting = false;
+
+function kirimForm(entryData) {
+  const formData = new FormData();
+  formData.append("entry.2129652086", entryData.id || "-");
+  formData.append("entry.1423031901", entryData.nama || "-");
+  formData.append("entry.476602258", entryData.jabatan || "-");
+
+  fetch(FORM_URL, { method: "POST", mode: "no-cors", body: formData })
+    .then(() => {
+      const now = new Date();
+      const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+      const tanggal = now.toLocaleDateString('id-ID', options);
+      const jam = now.toLocaleTimeString('id-ID');
+
+      statusEl.innerText = "Presensi Berhasil ✔";
+      statusEl.className = "success";
+      rekapEl.innerText = `
+Nama: ${entryData.nama}
+Jabatan: ${entryData.jabatan}
+Hari/Tanggal: ${tanggal}
+Jam: ${jam}
+      `;
+
+      setTimeout(() => {
+        statusEl.innerText = "Menunggu scan...";
+        statusEl.className = "success";
+      }, 3000);
+
+      isSubmitting = false;
+    })
+    .catch(err => {
+      console.error(err);
+      statusEl.innerText = "Gagal mengirim ❌";
+      statusEl.className = "error";
+      isSubmitting = false;
+    });
+}
+
+function onScanSuccess(decodedText) {
+  if (isSubmitting) return;
+  isSubmitting = true;
+
+  const parts = decodedText.split("|");
+
+  if(parts.length !== 3){
+    statusEl.innerText = "QR tidak valid ❌";
+    statusEl.className = "error";
+    isSubmitting = false;
+    return;
+  }
+
+  const entryData = {
+    id: parts[0],
+    nama: parts[1],
+    jabatan: parts[2]
+  };
+
+  const todayKey =
+    entryData.id + "|" +
+    entryData.nama + "_" +
+    new Date().toLocaleDateString("id-ID");
+
+  if (scannedToday.has(todayKey)) {
+
+    const now = new Date();
+    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+
+    statusEl.innerText = "Sudah presensi hari ini ❌";
+    statusEl.className = "warning";
+
+    rekapEl.innerText = `
+Nama: ${entryData.nama}
+Jabatan: ${entryData.jabatan}
+Hari/Tanggal: ${now.toLocaleDateString('id-ID', options)}
+Jam: ${now.toLocaleTimeString('id-ID')}
+    `;
+
+    isSubmitting = false;
+    return;
+  }
+
+  scannedToday.add(todayKey);
+  kirimForm(entryData);
+}
+
+function onScanFailure(error) {}
+
+window.onload = function() {
+  Html5Qrcode.getCameras().then(cameras => {
+    if (cameras.length) {
+
+      const scanner = new Html5Qrcode("reader");
+
+      scanner.start(
+        cameras[0].id,
+        { fps: 10, qrbox: 250 },
+        onScanSuccess,
+        onScanFailure
+      );
+
+    } else {
+      statusEl.innerText = "Kamera tidak ditemukan ❌";
+      statusEl.className = "error";
+    }
+  }).catch(err => {
+    statusEl.innerText = "Tidak bisa akses kamera ❌";
+    statusEl.className = "error";
+  });
+};
+</script>
 
 </body>
 </html>
